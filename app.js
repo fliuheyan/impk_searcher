@@ -3,48 +3,56 @@ const yaml = require('js-yaml');
 const http = require('http');
 const yamlObj = yaml.load(fs.readFileSync('./dictionary.yml', 'utf8'));
 const jsdom = require("jsdom");
-
+const {promisify} = require('util');
 const {JSDOM} = jsdom;
-const pages = 1;
+const pages = 20;
 const host_name = "bbs.impk.cc";
 const default_url = "http://bbs.impk.cc";
+const promiseGet = promisify(http.get)
 const result = [];
-const searchCriteria = "";
+const searchCriteria = "qg";
+const waitTimeInMs = 200;
+
+const sleep = (waitTimeInMs) => new Promise(resolve => setTimeout(resolve, waitTimeInMs));
 
 async function start() {
     //visit page by page
     //resolve each poster link
-    const paths = await visitPages(pages);
+    const pathsByPage = await generatePagePosterPaths(pages);
+    fs.writeFileSync("linkcache", flatten(pathsByPage).join("\n"));
     //fetch poster content
     //css selector select content
     //match dictionary
-
-    fetchPosterContent(paths);
+    return await fetchPosterContent();
 }
 
-async function visitPages(pages) {
-    const paths = [];
-    [...Array(pages).keys()].forEach(value => {
+function flatten(arr) {
+    return [].concat(...arr)
+}
+
+async function asyncFlatMap(arr, asyncFn) {
+    return Promise.all(flatten(await arr.map(asyncFn)))
+}
+
+function asyncMap(arr, asyncFn) {
+    return Promise.all(arr.map(asyncFn))
+}
+
+async function generatePagePosterPaths(pages) {
+    return await Promise.all([...Array(pages).keys()].map(async (value) => {
         const path = "/board-135&page-" + value + 1;
-        paths.push(fetchPosterLinksFromPage(path));
-    });
-    return paths;
+        return await fetchPosterLinksFromPage(path);
+    }));
 }
 
-function fetchPosterLinksFromPage(path) {
-    const poster_links_paths = [];
-    requestIMPK(path, function (rawData) {
-        resolvePosterLinks(rawData, poster_links_paths);
-    });
-    console.log(poster_links_paths)
-    return poster_links_paths;
+async function fetchPosterLinksFromPage(path) {
+    const rawData = await requestIMPK(path);
+    return resolvePosterLinks(rawData);
 }
 
-function resolvePosterLinks(rawData, poster_links_paths) {
+function resolvePosterLinks(rawData) {
     //TODO
-    /*
-    $("[cellpadding='4'][cellspacing='1'][width='100%']")
-     */
+    const poster_links_paths = [];
     const dom = new JSDOM(rawData);
     const selected_dom = dom.window.document.querySelectorAll("a.Topic");
     //从第五个开始取得href
@@ -53,31 +61,20 @@ function resolvePosterLinks(rawData, poster_links_paths) {
             poster_links_paths.push(value.href);
         }
     });
+    return poster_links_paths;
 }
 
-function fetchPosterContent(paths) {
-    console.log("############start content")
-    console.log(paths)
-
-    paths.forEach(path => {
-        requestIMPK("/" + path, function (rawData) {
-            accumulateMatchedWebLink(searchCriteria, resolvePosterContent(rawData), path);
-        });
-    });
+async function fetchPosterContent(paths) {
+    const rawData = await requestIMPK("/ShowTopic-8523887-135.php?id=8523887");
+    accumulateMatchedWebLink(searchCriteria, resolvePosterContent(rawData), path)
 }
 
 function resolvePosterContent(rawData) {
-    //TODO
-    console.log("#######resolve");
     const dom = new JSDOM(rawData);
-
-    debugger;
-    const content = dom.window.document.querySelectorAll("table");
-    console.log(content.text)
-    return "";
+    return  dom.window.document.querySelectorAll("td")[26].textContent;
 }
 
-function requestIMPK(path, callback) {
+function requestIMPK(path) {
     const decoder = new TextDecoder('gbk');
     const options = {
         hostname: host_name,
@@ -85,30 +82,39 @@ function requestIMPK(path, callback) {
         path: path,
         headers: {'Cookie': 'iad=iad; Server=FBB, TempAdmin=No, Expire=0, HideModeratorLinks, Status=0, Name=fliuheyan, Passwd=32TKF5RB1N9BM879CB2HVOTEY66YOMR3{end}; UM_distinctid=1786537cfbf89d-033f5ce79e94e7-19386054-1ea000-1786537cfc0479; FBB-OldThreads=42612g'}
     }
-    const req = http.get(options, (res) => {
+    return new Promise(((resolve, reject) => {
         let rawData = '';
-        res.on('data', (chunk) => {
-            rawData += decoder.decode(chunk);
+        const request = http.get(options, (response) => {
+            response.on('data', (chunk) => {
+                rawData += decoder.decode(chunk);
+            });
+            response.on('end', () => {
+                try {
+                    resolve(rawData)
+                } catch (e) {
+                    reject(e)
+                }
+            });
+        }).on('error', (err) => {
+            console.error(err);
         });
-        res.on('end', () => {
-            try {
-                callback(rawData);
-            } catch (e) {
-                console.error(e.message);
-            }
-        });
-    }).on('error', err => {
-        console.error(err);
-    });
-    req.end();
+        request.end();
+    }));
 }
 
-function accumulateMatchedWebLink(searchCriteria,posterStr, url) {
-    if (Object.keys(yamlObj).includes(searchCriteria) ||
-        yamlObj[searchCriteria].some(str => posterStr.toLowerCase().includes(str.toLowerCase()))) {
+function accumulateMatchedWebLink(searchCriteria, posterStr, url) {
+    let keys = Object.keys(yamlObj);
+    if (keys.includes(searchCriteria) ||
+        keys.map(key => yamlObj[key]).some(str => {
+            console.log("###########")
+            console.log(str)
+            return posterStr.toLowerCase().includes(str.toLowerCase())
+        })) {
         result.push(searchCriteria + " >>> " + url);
     }
 }
 
-start();
-console.log(result.join("\n"));
+(async () => {
+    const result = await start();
+    console.log(result);
+})();
