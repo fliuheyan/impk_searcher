@@ -5,61 +5,75 @@ const yamlObj = yaml.load(fs.readFileSync('./dictionary.yml', 'utf8'));
 const jsdom = require("jsdom");
 
 const {JSDOM} = jsdom;
-const key = "格力风";
 const pages = 1;
 const host_name = "bbs.impk.cc";
 const default_url = "http://bbs.impk.cc";
 const result = [];
-const poster_links = [];
+const searchCriteria = "";
 
-function start() {
+async function start() {
     //visit page by page
     //resolve each poster link
-    visitPages(pages);
+    const paths = await visitPages(pages);
     //fetch poster content
     //css selector select content
     //match dictionary
 
-    // fetchPosterContent();
+    fetchPosterContent(paths);
 }
 
-function visitPages(pages) {
+async function visitPages(pages) {
+    const paths = [];
     [...Array(pages).keys()].forEach(value => {
         const path = "/board-135&page-" + value + 1;
-        const url = default_url + path;
-        fetchPosterLinksFromPage(url, path);
+        paths.push(fetchPosterLinksFromPage(path));
     });
+    return paths;
 }
 
-function fetchPosterLinksFromPage(url, path) {
-    requestIMPK(path, function (rawData, url) {
-        resolvePosterLinks(rawData);
-    })
+function fetchPosterLinksFromPage(path) {
+    const poster_links_paths = [];
+    requestIMPK(path, function (rawData) {
+        resolvePosterLinks(rawData, poster_links_paths);
+    });
+    console.log(poster_links_paths)
+    return poster_links_paths;
 }
 
-function resolvePosterLinks(rawData) {
+function resolvePosterLinks(rawData, poster_links_paths) {
     //TODO
     /*
     $("[cellpadding='4'][cellspacing='1'][width='100%']")
      */
     const dom = new JSDOM(rawData);
-    const selected_dom = dom.window.document.querySelector(".tableborder").textContent;
-    console.log(selected_dom);
-    // console.log(rawData);
-
-    poster_links.push('http://bbs.impk.cc/ShowTopic-8536673-135.php?id=8536673');
+    const selected_dom = dom.window.document.querySelectorAll("a.Topic");
+    //从第五个开始取得href
+    selected_dom.forEach((value, index) => {
+        if (index >= 4) {
+            poster_links_paths.push(value.href);
+        }
+    });
 }
 
-function fetchPosterContent() {
-    poster_links.forEach(url => {
-        requestIMPK(url, function (rawData) {
-            accumulateMatchedWebLink(resolvePosterContent(rawData), url);
+function fetchPosterContent(paths) {
+    console.log("############start content")
+    console.log(paths)
+
+    paths.forEach(path => {
+        requestIMPK("/" + path, function (rawData) {
+            accumulateMatchedWebLink(searchCriteria, resolvePosterContent(rawData), path);
         });
     });
 }
 
 function resolvePosterContent(rawData) {
     //TODO
+    console.log("#######resolve");
+    const dom = new JSDOM(rawData);
+
+    debugger;
+    const content = dom.window.document.querySelectorAll("table");
+    console.log(content.text)
     return "";
 }
 
@@ -89,10 +103,10 @@ function requestIMPK(path, callback) {
     req.end();
 }
 
-function accumulateMatchedWebLink(posterStr, url) {
-    if (Object.keys(yamlObj).includes(key) ||
-        yamlObj[key].some(str => posterStr.toLowerCase().includes(str.toLowerCase()))) {
-        result.push(key + " >>> " + url);
+function accumulateMatchedWebLink(searchCriteria,posterStr, url) {
+    if (Object.keys(yamlObj).includes(searchCriteria) ||
+        yamlObj[searchCriteria].some(str => posterStr.toLowerCase().includes(str.toLowerCase()))) {
+        result.push(searchCriteria + " >>> " + url);
     }
 }
 
