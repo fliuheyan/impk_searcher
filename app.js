@@ -8,6 +8,7 @@ const host_name = "bbs.impk.cc";
 const default_url = "http://bbs.impk.cc";
 const waitTimeInMs = 1 * 500;
 const refreshTooFast = "您的刷新速度太快";
+const open = require('open');
 
 const sleep = (waitTimeInMs) => new Promise(resolve => setTimeout(resolve, waitTimeInMs));
 
@@ -62,16 +63,17 @@ function resolvePosterLinks(rawData) {
 
 async function fetchPosterContent() {
     const paths = fs.readFileSync("linkcache").toString().split("\n");
-    const searchCriteria = process.argv[0] || "无线";
+    const searchCriteria = process.argv.slice(2)[0] || "无线";
     const result = [];
     for (let index = 0; index < paths.length; index++) {
         await sleep(waitTimeInMs);
         const path = paths[index];
         const rawData = await requestIMPK("/" + path);
-        const webLink = accumulateMatchedWebLink(searchCriteria, resolvePosterContent(rawData), path);
-        if (webLink.length !== 0) {
-            console.log(webLink)
-            result.push(webLink);
+        const webLinkObj = accumulateMatchedWebLink(searchCriteria, resolvePosterContent(rawData), path);
+        if (Object.keys(webLinkObj).length !== 0) {
+            console.log(webLinkObj.searchCriteria + " ===> " + webLinkObj.webLink)
+            open(webLinkObj.webLink);
+            result.push(webLinkObj);
         }
     }
     // paths.slice(0, 10).forEach(async (path) => {
@@ -98,8 +100,6 @@ function resolvePosterContent(rawData) {
     if (dom) {
         content = dom.textContent;
     }
-    console.log("################content")
-    console.log(content)
     return content;
 }
 
@@ -132,16 +132,16 @@ function requestIMPK(path) {
 }
 
 function accumulateMatchedWebLink(searchCriteria, posterStr, path) {
-    let result = "";
-    let keys = Object.keys(yamlObj);
+    let result = {};
     if (posterStr.toLowerCase().includes(searchCriteria) ||
-        keys.map(key => yamlObj[key]).some(strArray => strArray.some(content => {
+        yamlObj[searchCriteria] && yamlObj[searchCriteria].some(content => {
             if (posterStr.toLowerCase().includes(content)) {
                 searchCriteria = content;
                 return true;
             }
-        }))) {
-        result = searchCriteria + " >>> " + default_url + "/" + path;
+        })) {
+        result.searchCriteria = searchCriteria;
+        result.webLink = default_url + "/" + path;
     }
     if (posterStr.includes(refreshTooFast)) {
         console.log("###########error")
