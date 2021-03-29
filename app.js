@@ -4,7 +4,6 @@ const http = require('http');
 const yamlObj = yaml.load(fs.readFileSync('./dictionary.yml', 'utf8'));
 const jsdom = require("jsdom");
 const {JSDOM} = jsdom;
-const pages = 20;
 const host_name = "bbs.impk.cc";
 const default_url = "http://bbs.impk.cc";
 const waitTimeInMs = 1 * 500;
@@ -15,7 +14,7 @@ const sleep = (waitTimeInMs) => new Promise(resolve => setTimeout(resolve, waitT
 async function start() {
     //visit page by page
     //resolve each poster link
-    // await generatePagePosterPaths(pages);
+    await generatePagePosterPaths(pages);
     //fetch poster content
     //css selector select content
     //match dictionary
@@ -63,7 +62,7 @@ function resolvePosterLinks(rawData) {
 
 async function fetchPosterContent() {
     const paths = fs.readFileSync("linkcache").toString().split("\n");
-    const searchCriteria = process.argv[0];
+    const searchCriteria = process.argv[0] || "无线";
     const result = [];
     for (let index = 0; index < paths.length; index++) {
         await sleep(waitTimeInMs);
