@@ -7,19 +7,19 @@ const {JSDOM} = jsdom;
 const pages = 20;
 const host_name = "bbs.impk.cc";
 const default_url = "http://bbs.impk.cc";
-const searchCriteria = "摩西之环";
-const waitTimeInMs = 10 * 1000;
+const waitTimeInMs = 1 * 500;
+const refreshTooFast = "您的刷新速度太快";
 
 const sleep = (waitTimeInMs) => new Promise(resolve => setTimeout(resolve, waitTimeInMs));
 
 async function start() {
     //visit page by page
     //resolve each poster link
-    await generatePagePosterPaths(pages);
+    // await generatePagePosterPaths(pages);
     //fetch poster content
     //css selector select content
     //match dictionary
-    // return await fetchPosterContent();
+    await fetchPosterContent();
 }
 
 function flatten(arr) {
@@ -63,17 +63,16 @@ function resolvePosterLinks(rawData) {
 
 async function fetchPosterContent() {
     const paths = fs.readFileSync("linkcache").toString().split("\n");
+    const searchCriteria = process.argv[0];
     const result = [];
     for (let index = 0; index < paths.length; index++) {
-        console.log("###########开始第" + (index + 1) + "页搜索#######");
         await sleep(waitTimeInMs);
         const path = paths[index];
         const rawData = await requestIMPK("/" + path);
         const webLink = accumulateMatchedWebLink(searchCriteria, resolvePosterContent(rawData), path);
         if (webLink.length !== 0) {
-            console.log("###########第" + (index + 1) + "页包含物品===>");
             console.log(webLink)
-            result.concat(...webLink);
+            result.push(webLink);
         }
     }
     // paths.slice(0, 10).forEach(async (path) => {
@@ -94,11 +93,14 @@ async function fetchPosterContent() {
 }
 
 function resolvePosterContent(rawData) {
-    const dom = new JSDOM(rawData).window.document.querySelectorAll("td")[26];
+    // const dom = new JSDOM(rawData).window.document.querySelectorAll("td")[26];
+    const dom = new JSDOM(rawData).window.document.querySelectorAll('table[border="0"][width="92%"]')[0];
     let content = "";
     if (dom) {
         content = dom.textContent;
     }
+    console.log("################content")
+    console.log(content)
     return content;
 }
 
@@ -131,13 +133,19 @@ function requestIMPK(path) {
 }
 
 function accumulateMatchedWebLink(searchCriteria, posterStr, path) {
-    const result = [];
+    let result = "";
     let keys = Object.keys(yamlObj);
-    if (keys.includes(searchCriteria) ||
-        keys.map(key => yamlObj[key]).some(strArray => {
-            return posterStr.toLowerCase().includes(strArray.map(str => str.toLowerCase()).includes(strArray));
-        })) {
-        result.push(searchCriteria + " >>> " + default_url + path);
+    if (posterStr.toLowerCase().includes(searchCriteria) ||
+        keys.map(key => yamlObj[key]).some(strArray => strArray.some(content => {
+            if (posterStr.toLowerCase().includes(content)) {
+                searchCriteria = content;
+                return true;
+            }
+        }))) {
+        result = searchCriteria + " >>> " + default_url + "/" + path;
+    }
+    if (posterStr.includes(refreshTooFast)) {
+        console.log("###########error")
     }
     return result;
 }
