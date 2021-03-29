@@ -14,7 +14,7 @@ const sleep = (waitTimeInMs) => new Promise(resolve => setTimeout(resolve, waitT
 async function start() {
     //visit page by page
     //resolve each poster link
-    await generatePagePosterPaths(pages);
+    await generatePagePosterPaths(20);
     //fetch poster content
     //css selector select content
     //match dictionary
